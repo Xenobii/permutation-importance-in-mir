@@ -1,0 +1,9 @@
+[submodule "models/timbre-trap"]
+	path = models/timbre-trap
+	url = https://github.com/sony/timbre-trap.git
+[submodule "models/pesto"]
+	path = models/pesto
+	url = https://github.com/SonyCSLParis/pesto.git
+[submodule "models/onsets-and-frames"]
+	path = models/onsets-and-frames
+	url = https://github.com/KinWaiCheuk/ICPR2020.git
