@@ -56,7 +56,7 @@ def hooked_inference(
         'onset'  : [B, T, P],
         'frame'  : [B, T, P],
         'contour': [B, T, 3*P]
-        }
+    }
     """
     unwrapped_output = {k: unwrap_output(output[k], audio_original_length, n_overlapping_frames) for k in output}
 
@@ -127,8 +127,9 @@ def masked_predict(
     if torch.cuda.is_available():
         model.cuda()
 
-    # Load masker
-    masker = HarmonicMasking()
+    # Load masker and required label
+    masker = FundamentalMasking()
+    masker.load_label(midi_path)
 
     print(f"Predicting MIDI for {audio_path}...")
     
@@ -154,8 +155,10 @@ def masked_predict(
 
 if __name__ == "__main__":
     
-    wav_path    = "test_data/test_audio.wav"
-    midi_path   = "test_data/test_midi.MID"
+    wav_path    = "test_data/maps_1.wav"
+    midi_path   = "test_data/maps_1.mid"
+    # wav_path    = "test_data/test_audio.wav"
+    # midi_path   = "test_data/test_midi.MID"
     model_path  = "models/basic_pitch/assets/basic_pitch_pytorch_icassp_2022.pth"
     output_path = "test_data/test_output.mid"
     
