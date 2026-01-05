@@ -1,5 +1,5 @@
 import sys
-import pathlib
+from pathlib import Path
 from typing import Union, Optional, Dict, List, Tuple
 
 import torch
@@ -8,23 +8,25 @@ import numpy as np
 import pretty_midi
 
 # Resolve the path because someone didn't acount for using basic_pitch as a submodule
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "models" / "basic_pitch"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "models" / "basic_pitch"))
 
 from models.basic_pitch.basic_pitch_torch import note_creation as infer
 from models.basic_pitch.basic_pitch_torch.model import BasicPitchTorch
-from models.basic_pitch.basic_pitch_torch.inference import unwrap_output, get_audio_input
+from models.basic_pitch.basic_pitch_torch.inference import unwrap_output, get_audio_input, predict
 from models.basic_pitch.basic_pitch_torch.constants import (
     AUDIO_SAMPLE_RATE,
     AUDIO_N_SAMPLES,
     FFT_HOP
 )
 
-from experiments.permutations import CQTRandPerm
+from experiments.permutations import CQTRandPerm, CQTMicrotonalPerm, CQTHighFreqPerm
+from experiments.maskers import FundamentalMasking, HarmonicMasking, SoftFundamentalMasking
 
 
-def custom_inference(
-        audio_path: Union[pathlib.Path, str],
+def hooked_inference(
+        audio_path: Union[Path, str],
         model: nn.Module,
+        hook_module: nn.Module
 ) -> Dict[str, np.array]:
     # Run model on the input audio path
     n_overlapping_frames = 30
@@ -37,13 +39,12 @@ def custom_inference(
         audio_windowed = audio_windowed.cuda()
 
     # Hook permutations
-    permuter = CQTRandPerm(seed=0)
     def bp_pre_hook(
             module: nn.Module,
             inputs: Tuple[torch.Tensor, ...],
     ) -> Tuple[torch.Tensor, ...]:
         (x,) = inputs
-        x_perm = permuter(x)
+        x_perm = hook_module(x)
         return (x_perm,)
     handle = model.hs.register_forward_pre_hook(bp_pre_hook)
     
@@ -62,9 +63,9 @@ def custom_inference(
     return unwrapped_output
 
 
-def custom_predict(
-        audio_path: Union[pathlib.Path, str],
-        model_path: Union[pathlib.Path, str],
+def permuted_predict(
+        audio_path: Union[Path, str],
+        model_path: Union[Path, str],
         onset_threshold: float = 0.5, 
         frame_threshold: float = 0.3,
         minimum_note_length: float = 127.70,
@@ -74,17 +75,66 @@ def custom_predict(
         melodia_trick: bool = True,
         midi_tempo: float = 120,
 ) -> Tuple[Dict[str, np.array], pretty_midi.PrettyMIDI, List[Tuple[float, float, int, float, Optional[List[int]]]],]:
-    # Run a single prediction
-
+    # Load model
     model = BasicPitchTorch()
     model.load_state_dict(torch.load(str(model_path)))
     model.eval()
     if torch.cuda.is_available():
         model.cuda()
 
-    print(f"Predicting MIDI for {audio_path}...")
+    # Load permuter
+    permuter = CQTHighFreqPerm(start_bin=250, seed=0)
+    # permuter = CQTRandPerm(p=0.1, seed=0)
+    # permuter = CQTMicrotonalPerm(bins_per_semitone=3, seed=0)
 
-    model_output = custom_inference(audio_path, model)
+    print(f"Predicting MIDI for {audio_path}...")
+    
+    model_output = hooked_inference(audio_path, model, permuter)
+    
+    # Convert to midi
+    min_note_len = int(np.round(minimum_note_length / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP)))
+    midi_data, note_events = infer.model_output_to_notes(
+        model_output,
+        onset_thresh         = onset_threshold,
+        frame_thresh         = frame_threshold,
+        min_note_len         = min_note_len,
+        min_freq             = minimum_frequency,
+        max_freq             = maximum_frequency,
+        multiple_pitch_bends = multiple_pitch_bends,
+        melodia_trick        = melodia_trick,
+        midi_tempo           = midi_tempo,
+    )
+
+    return model_output, midi_data, note_events
+
+
+def masked_predict(
+        audio_path: Union[Path, str],
+        midi_path: Union[Path, str],
+        model_path: Union[Path, str],
+        onset_threshold: float = 0.5, 
+        frame_threshold: float = 0.3,
+        minimum_note_length: float = 127.70,
+        minimum_frequency: Optional[float] = None,
+        maximum_frequency: Optional[float] = None,
+        multiple_pitch_bends: bool = False,
+        melodia_trick: bool = True,
+        midi_tempo: float = 120,
+) -> Tuple[Dict[str, np.array], pretty_midi.PrettyMIDI, List[Tuple[float, float, int, float, Optional[List[int]]]],]:
+    model = BasicPitchTorch()
+    model.load_state_dict(torch.load(str(model_path)))
+    model.eval()
+    if torch.cuda.is_available():
+        model.cuda()
+
+    # Load masker
+    masker = HarmonicMasking()
+
+    print(f"Predicting MIDI for {audio_path}...")
+    
+    model_output = hooked_inference(audio_path, model, masker)
+
+    # Convert to midi
     min_note_len = int(np.round(minimum_note_length / 1000 * (AUDIO_SAMPLE_RATE / FFT_HOP)))
     midi_data, note_events = infer.model_output_to_notes(
         model_output,
@@ -102,12 +152,19 @@ def custom_predict(
 
 
 
-
 if __name__ == "__main__":
     
     wav_path    = "test_data/test_audio.wav"
+    midi_path   = "test_data/test_midi.MID"
     model_path  = "models/basic_pitch/assets/basic_pitch_pytorch_icassp_2022.pth"
     output_path = "test_data/test_output.mid"
     
-    model_out, midi_data, note_events = custom_predict(wav_path, model_path=str(model_path))
+    # model_out, midi_data, note_events = permuted_predict(
+    #     wav_path,
+    #     model_path=str(model_path))
+    model_out, midi_data, note_events = masked_predict(
+        wav_path,
+        midi_path,
+        model_path=str(model_path)
+    )
     midi_data.write(str(output_path))

@@ -58,3 +58,12 @@ A common problem for AMT models is the lack of training examples for extreme cas
 $$
     X_{noise} \sim \mathcal{N}_{f, t}
 $$
+
+
+## Features
+
+Given the input CQT spectrogram and frame labels for a piece of audio, we will examine the importance of the fundametal frequency compared to its harmonics when transcribing.
+
+### Fundamental masking
+
+### Harmonic masking
