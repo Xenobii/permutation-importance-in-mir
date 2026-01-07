@@ -1,7 +1,7 @@
 # Models
 models:
   - name: basic_pitch
-    _target_: pipeline.models.BasicPitchAdapter
+    _target_: pipeline.models.BasicPitch
     weight_path: models/basic_pitch/assets/basic_pitch_pytorch_icassp_2022.pth
     inference_settings:
       onset_thresh: 0.5

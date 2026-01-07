@@ -11,13 +11,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "models" / "basic_p
 from models.basic_pitch.basic_pitch_torch.model import BasicPitchTorch
 from models.basic_pitch.basic_pitch_torch import note_creation as infer
 from models.basic_pitch.basic_pitch_torch.inference import unwrap_output, get_audio_input, predict
-from models.basic_pitch.basic_pitch_torch.constants import (
-    AUDIO_N_SAMPLES,
-    FFT_HOP
-)
+from models.basic_pitch.basic_pitch_torch.constants import AUDIO_N_SAMPLES, FFT_HOP
 
 # Onsets and Frames
-from models.of_alt.model.model import UnetTranscriptionModel
+# from models.of_alt.model.model import UnetTranscriptionModel
 
 
 class BaseModel():
